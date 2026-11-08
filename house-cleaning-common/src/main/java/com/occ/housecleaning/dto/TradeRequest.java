@@ -55,4 +55,8 @@ public record TradeRequest(
             throw new IllegalArgumentException("buyerMemberId and sellerMemberId cannot be the same clearing member");
         }
     }
+
+    public TradeRequest() {
+        this("", "", "", 0, BigDecimal.ZERO, "", "", Instant.now());
+    }
 }

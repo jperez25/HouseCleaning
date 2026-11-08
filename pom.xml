@@ -26,6 +26,7 @@
         <java.version>25</java.version>
         <testng.version>7.11.0</testng.version>
         <rest-assured.version>5.5.0</rest-assured.version>
+        <groovy.version>4.0.24</groovy.version>
         <maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
         <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
     </properties>

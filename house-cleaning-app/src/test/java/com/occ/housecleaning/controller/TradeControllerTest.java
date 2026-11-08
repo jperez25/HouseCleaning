@@ -1,13 +1,26 @@
 package com.occ.housecleaning.controller;
 
+import com.occ.housecleaning.dto.ContractLeg;
+import com.occ.housecleaning.dto.LegType;
+import com.occ.housecleaning.dto.NovationStatus;
+import com.occ.housecleaning.dto.TradeNovationResponse;
+import com.occ.housecleaning.dto.TradeRequest;
+import com.occ.housecleaning.service.ClearingService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(TradeController.class)
@@ -16,9 +29,34 @@ class TradeControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @MockitoBean
+    private ClearingService clearingService;
+
     @Test
-    @DisplayName("POST /api/v1/trades/novate should return 200 OK when request body is valid")
+    @DisplayName("POST /api/v1/trades/novate should return 200 OK with novation response when request is valid")
     void validTradeRequestReturns200() throws Exception {
+        ContractLeg buyerLeg = new ContractLeg(
+            "LEG-001", "EXCH-2026-98123", LegType.BUYER_LEG,
+            "MEM-101", "OCC", "AAPL260619C00150000",
+            10, new BigDecimal("4.50"), Instant.parse("2026-11-05T15:30:00Z"),
+            NovationStatus.NOVATED
+        );
+        ContractLeg sellerLeg = new ContractLeg(
+            "LEG-002", "EXCH-2026-98123", LegType.SELLER_LEG,
+            "OCC", "MEM-202", "AAPL260619C00150000",
+            10, new BigDecimal("4.50"), Instant.parse("2026-11-05T15:30:00Z"),
+            NovationStatus.NOVATED
+        );
+        TradeNovationResponse novationResponse = new TradeNovationResponse(
+            "EXCH-2026-98123",
+            NovationStatus.NOVATED,
+            Instant.parse("2026-11-05T15:30:01Z"),
+            buyerLeg,
+            sellerLeg
+        );
+
+        when(clearingService.novateTrade(any(TradeRequest.class))).thenReturn(novationResponse);
+
         String validJson = """
             {
               "externalTradeId": "EXCH-2026-98123",
@@ -35,7 +73,13 @@ class TradeControllerTest {
         mockMvc.perform(post("/api/v1/trades/novate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(validJson))
-            .andExpect(status().isOk());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.externalTradeId").value("EXCH-2026-98123"))
+            .andExpect(jsonPath("$.status").value("NOVATED"))
+            .andExpect(jsonPath("$.buyerLeg.buyerMemberId").value("MEM-101"))
+            .andExpect(jsonPath("$.buyerLeg.sellerMemberId").value("OCC"))
+            .andExpect(jsonPath("$.sellerLeg.buyerMemberId").value("OCC"))
+            .andExpect(jsonPath("$.sellerLeg.sellerMemberId").value("MEM-202"));
     }
 
     @Test
