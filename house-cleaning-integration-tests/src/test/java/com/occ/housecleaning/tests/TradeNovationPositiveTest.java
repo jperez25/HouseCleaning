@@ -5,6 +5,10 @@ import com.occ.housecleaning.generators.TradeRequestGenerator;
 import io.restassured.response.Response;
 import org.testng.annotations.Test;
 
+import static com.occ.housecleaning.common.TestGroups.REGRESSION;
+import static com.occ.housecleaning.common.TestGroups.SEQUENTIAL;
+import static com.occ.housecleaning.common.TestGroups.SMOKE;
+
 import static com.occ.housecleaning.generators.TradeRequestGenerator.createRandomTradeRequest;
 
 /**
@@ -14,7 +18,7 @@ import static com.occ.housecleaning.generators.TradeRequestGenerator.createRando
  */
 public class TradeNovationPositiveTest extends AbstractTest {
 
-    @Test(description = "Post a valid trade request and validate the novation response, audit, contracts and balance")
+    @Test(groups =REGRESSION, description = "Post a valid trade request and validate the novation response, audit, contracts and balance")
     public void postTradeRequestValidateResponse() {
         TradeRequest request = createRandomTradeRequest();
 
@@ -39,7 +43,7 @@ public class TradeNovationPositiveTest extends AbstractTest {
                 .validateMemberBalanceResponse(buyerBalanceResponse, request.buyerMemberId());
     }
 
-    @Test(description = "Get the ledger of a member with trades and validate page size, totals and ownership")
+    @Test(groups = REGRESSION, description = "Get the ledger of a member with trades and validate page size, totals and ownership")
     public void getMemberLedgerValidatePagination() {
         TradeRequest first = TradeRequestGenerator.builder().withMembers("MEM-201", "MEM-202").build();
         TradeRequest second = TradeRequestGenerator.builder().withMembers("MEM-201", "MEM-202").build();

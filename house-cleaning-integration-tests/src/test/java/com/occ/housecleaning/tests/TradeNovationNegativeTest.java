@@ -6,6 +6,8 @@ import com.occ.housecleaning.generators.TradeRequestGenerator;
 import io.restassured.response.Response;
 import org.testng.annotations.Test;
 
+import static com.occ.housecleaning.common.TestGroups.REGRESSION;
+
 import java.math.BigDecimal;
 
 import static com.occ.housecleaning.generators.TradeRequestGenerator.createRandomTradeRequest;
@@ -17,7 +19,7 @@ import static com.occ.housecleaning.generators.TradeRequestGenerator.createRando
  */
 public class TradeNovationNegativeTest extends AbstractTest {
 
-    @Test(description = "Post an empty trade request and validate 400 Bad Request listing the invalid fields")
+    @Test(groups = REGRESSION, description = "Post an empty trade request and validate 400 Bad Request listing the invalid fields")
     public void postEmptyTradeRequestValidateBadRequest() {
         TradeRequest invalidRequest = TradeRequestGenerator.createEmptyTradeRequest();
 
@@ -27,7 +29,7 @@ public class TradeNovationNegativeTest extends AbstractTest {
                 "externalTradeId", "exchangeCode", "optionSymbol", "quantity", "executionPrice");
     }
 
-    @Test(description = "Resubmit a novated trade and validate 409 DUPLICATE_TRADE with the original novation intact")
+    @Test(groups = REGRESSION, description = "Resubmit a novated trade and validate 409 DUPLICATE_TRADE with the original novation intact")
     public void postDuplicateTradeValidateConflict() {
         TradeRequest request = createRandomTradeRequest();
         tradeValidator.validateStatusCode(tradeApiClient.postNovateTrade(request), 200);
@@ -47,7 +49,7 @@ public class TradeNovationNegativeTest extends AbstractTest {
                 .validateTradeAuditResponse(auditResponse, request);
     }
 
-    @Test(description = "Post a trade with an unregistered member and validate 422 UNKNOWN_MEMBER, audited as REJECTED")
+    @Test(groups = REGRESSION, description = "Post a trade with an unregistered member and validate 422 UNKNOWN_MEMBER, audited as REJECTED")
     public void postTradeWithUnknownMemberValidateUnprocessable() {
         TradeRequest request = TradeRequestGenerator.builder().withBuyerMemberId("MEM-NOT-REGISTERED").build();
 
@@ -60,7 +62,7 @@ public class TradeNovationNegativeTest extends AbstractTest {
         tradeValidator.validateStatusCode(tradeApiClient.getNovatedContracts(request.externalTradeId()), 404);
     }
 
-    @Test(description = "Post a trade with an inactive member and validate 422 INACTIVE_MEMBER, audited as REJECTED")
+    @Test(groups = REGRESSION, description = "Post a trade with an inactive member and validate 422 INACTIVE_MEMBER, audited as REJECTED")
     public void postTradeWithInactiveMemberValidateUnprocessable() {
         TradeRequest request = TradeRequestGenerator.builder().withSellerMemberId("MEM-INACTIVE").build();
 
@@ -71,7 +73,7 @@ public class TradeNovationNegativeTest extends AbstractTest {
         tradeValidator.validateRejectedTradeAuditResponse(auditResponse, request, RejectionReason.INACTIVE_MEMBER);
     }
 
-    @Test(description = "Post a trade the zero-credit buyer cannot afford and validate 422 INSUFFICIENT_FUNDS, balance unchanged")
+    @Test(groups = REGRESSION, description = "Post a trade the zero-credit buyer cannot afford and validate 422 INSUFFICIENT_FUNDS, balance unchanged")
     public void postTradeWithInsufficientFundsValidateUnprocessable() {
         TradeRequest request = TradeRequestGenerator.builder()
                 .withBuyerMemberId("MEM-LOWCREDIT").withSellerMemberId("MEM-402")
@@ -87,14 +89,14 @@ public class TradeNovationNegativeTest extends AbstractTest {
         tradeValidator.validateStatusCode(tradeApiClient.getNovatedContracts(request.externalTradeId()), 404);
     }
 
-    @Test(description = "Get the audit of an unknown trade and validate 404 Not Found")
+    @Test(groups = REGRESSION, description = "Get the audit of an unknown trade and validate 404 Not Found")
     public void getUnknownTradeAuditValidateNotFound() {
         Response response = tradeApiClient.getTradeAudit(TradeRequestGenerator.randomExternalTradeId());
 
         tradeValidator.validateStatusCode(response, 404);
     }
 
-    @Test(description = "Get the ledger and balance of an unregistered member and validate 404 Not Found")
+    @Test(groups = REGRESSION, description = "Get the ledger and balance of an unregistered member and validate 404 Not Found")
     public void getUnknownMemberLedgerValidateNotFound() {
         tradeValidator
                 .validateStatusCode(tradeApiClient.getMemberLedger("MEM-DOES-NOT-EXIST"), 404)

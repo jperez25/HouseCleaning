@@ -78,8 +78,7 @@ tradeValidator
         .validateNovatedContractsResponse(contractsResponse, tradeRequest);
 ```
 
-Each validator method checks the expected HTTP status before checking response
-fields. Soft assertion failures are reported by the method that validates that
+Soft assertion failures are reported by the method that validates that
 response; use a separate shared `SoftAssertions` instance for supplementary
 assertions outside the validator.
 

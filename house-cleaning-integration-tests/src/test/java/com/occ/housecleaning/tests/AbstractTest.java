@@ -8,7 +8,6 @@ import com.occ.housecleaning.repository.MemberLedgerEntryRepository;
 import com.occ.housecleaning.repository.NovatedContractRepository;
 import com.occ.housecleaning.repository.RawTradeAuditRepository;
 import com.occ.housecleaning.validators.TradeValidator;
-import org.testng.SkipException;
 import org.testng.annotations.BeforeClass;
 
 import java.math.BigDecimal;
@@ -47,7 +46,7 @@ public abstract class AbstractTest {
         this.tradeValidator = new TradeValidator();
 
         if (!isServiceReachable(baseUrl)) {
-            throw new SkipException("Deployment test skipped: service is not reachable at " + baseUrl
+            throw new IllegalStateException("Service is not reachable at " + baseUrl
                     + ". Start or deploy the service first as specified in docs/testing-strategy.md.");
         }
     }
