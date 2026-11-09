@@ -5,9 +5,13 @@ import com.occ.housecleaning.dto.LegType;
 import com.occ.housecleaning.dto.NovationStatus;
 import com.occ.housecleaning.dto.TradeNovationResponse;
 import com.occ.housecleaning.dto.TradeRequest;
+import com.occ.housecleaning.dto.RejectionReason;
+import com.occ.housecleaning.exception.TradeRejectedException;
+import com.occ.housecleaning.model.Member;
 import com.occ.housecleaning.model.MemberLedgerBalance;
 import com.occ.housecleaning.repository.MemberLedgerBalanceRepository;
 import com.occ.housecleaning.repository.MemberLedgerEntryRepository;
+import com.occ.housecleaning.repository.MemberRepository;
 import com.occ.housecleaning.repository.NovatedContractRepository;
 import com.occ.housecleaning.repository.RawTradeAuditRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -45,6 +51,12 @@ class ClearingServiceTest {
     @Mock
     private MemberLedgerEntryRepository memberLedgerEntryRepository;
 
+    @Mock
+    private MemberRepository memberRepository;
+
+    @Mock
+    private TradeAuditRecorder tradeAuditRecorder;
+
     private ClearingService clearingService;
 
     @BeforeEach
@@ -54,6 +66,8 @@ class ClearingServiceTest {
             novatedContractRepository,
             memberLedgerBalanceRepository,
             memberLedgerEntryRepository,
+            memberRepository,
+            tradeAuditRecorder,
             new JsonMapper()
         );
     }
@@ -72,8 +86,10 @@ class ClearingServiceTest {
             Instant.parse("2026-11-05T15:30:00Z")
         );
 
-        when(memberLedgerBalanceRepository.findByMemberId("MEM-101")).thenReturn(Optional.empty());
-        when(memberLedgerBalanceRepository.findByMemberId("MEM-202")).thenReturn(Optional.empty());
+        givenMember("MEM-101", true, "1000000");
+        givenMember("MEM-202", true, "1000000");
+        givenBalance("MEM-101", "0");
+        givenBalance("MEM-202", "0");
 
         TradeNovationResponse response = clearingService.novateTrade(request);
 
@@ -116,11 +132,11 @@ class ClearingServiceTest {
             audit.getExternalTradeId().equals("EXCH-2026-98123") &&
             audit.getExchangeCode().equals("CBOE") &&
             audit.getRawPayload().contains("EXCH-2026-98123") &&
-            audit.getStatus().equals("NOVATED")
+            audit.getStatus() == NovationStatus.NOVATED
         ));
 
         // Verify novated_contracts persistence
-        verify(novatedContractRepository).saveAll(argThat(list -> {
+        verify(novatedContractRepository).saveAllAndFlush(argThat(list -> {
             var it = list.iterator();
             return it.hasNext();
         }));
@@ -145,5 +161,98 @@ class ClearingServiceTest {
         assertThatThrownBy(() -> clearingService.novateTrade(null))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("tradeRequest cannot be null");
+    }
+
+    @Test
+    @DisplayName("Should reject a duplicate trade with DUPLICATE_TRADE, audit the rejection and move no money")
+    void shouldRejectDuplicateTrade() {
+        when(novatedContractRepository.existsByExternalTradeId("EXCH-2026-98123")).thenReturn(true);
+
+        assertThatThrownBy(() -> clearingService.novateTrade(request("MEM-101", "MEM-202", "4.50")))
+            .isInstanceOfSatisfying(TradeRejectedException.class,
+                e -> assertThat(e.getReason()).isEqualTo(RejectionReason.DUPLICATE_TRADE));
+
+        verifyRejectionAudited(RejectionReason.DUPLICATE_TRADE);
+        verify(novatedContractRepository, never()).saveAllAndFlush(any());
+        verify(memberLedgerBalanceRepository, never()).save(any());
+        verify(memberLedgerEntryRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should reject an unregistered member with UNKNOWN_MEMBER")
+    void shouldRejectUnknownMember() {
+        when(memberRepository.findById("MEM-101")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> clearingService.novateTrade(request("MEM-101", "MEM-202", "4.50")))
+            .isInstanceOfSatisfying(TradeRejectedException.class,
+                e -> assertThat(e.getReason()).isEqualTo(RejectionReason.UNKNOWN_MEMBER));
+
+        verifyRejectionAudited(RejectionReason.UNKNOWN_MEMBER);
+        verify(memberLedgerBalanceRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should reject an inactive member with INACTIVE_MEMBER")
+    void shouldRejectInactiveMember() {
+        givenMember("MEM-101", true, "1000000");
+        givenMember("MEM-202", false, "1000000");
+
+        assertThatThrownBy(() -> clearingService.novateTrade(request("MEM-101", "MEM-202", "4.50")))
+            .isInstanceOfSatisfying(TradeRejectedException.class,
+                e -> assertThat(e.getReason()).isEqualTo(RejectionReason.INACTIVE_MEMBER));
+
+        verifyRejectionAudited(RejectionReason.INACTIVE_MEMBER);
+    }
+
+    @Test
+    @DisplayName("Should reject when buyer premium would exceed cash plus credit limit")
+    void shouldRejectInsufficientFunds() {
+        givenMember("MEM-101", true, "1000");   // premium is 4500
+        givenMember("MEM-202", true, "1000000");
+        givenBalance("MEM-101", "0");
+        givenBalance("MEM-202", "0");
+
+        assertThatThrownBy(() -> clearingService.novateTrade(request("MEM-101", "MEM-202", "4.50")))
+            .isInstanceOfSatisfying(TradeRejectedException.class,
+                e -> assertThat(e.getReason()).isEqualTo(RejectionReason.INSUFFICIENT_FUNDS));
+
+        verifyRejectionAudited(RejectionReason.INSUFFICIENT_FUNDS);
+        verify(novatedContractRepository, never()).saveAllAndFlush(any());
+        verify(memberLedgerBalanceRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Should allow a buyer to dip below zero exactly down to their credit limit")
+    void shouldAllowBuyerUpToCreditLimit() {
+        givenMember("MEM-101", true, "4500");   // premium is 4500, balance 0 -> exactly -limit
+        givenMember("MEM-202", true, "0");
+        givenBalance("MEM-101", "0");
+        givenBalance("MEM-202", "0");
+
+        TradeNovationResponse response = clearingService.novateTrade(request("MEM-101", "MEM-202", "4.50"));
+
+        assertThat(response.status()).isEqualTo(NovationStatus.NOVATED);
+    }
+
+    private TradeRequest request(String buyer, String seller, String price) {
+        return new TradeRequest("EXCH-2026-98123", "CBOE", "AAPL260619C00150000", 10,
+            new BigDecimal(price), buyer, seller, Instant.parse("2026-11-05T15:30:00Z"));
+    }
+
+    private void givenMember(String id, boolean active, String creditLimit) {
+        lenient().when(memberRepository.findById(id)).thenReturn(Optional.of(
+            Member.builder().memberId(id).name(id).active(active).creditLimit(new BigDecimal(creditLimit)).build()));
+    }
+
+    private void givenBalance(String id, String cash) {
+        lenient().when(memberLedgerBalanceRepository.findByMemberIdForUpdate(id)).thenReturn(Optional.of(
+            MemberLedgerBalance.builder().memberId(id).cashBalance(new BigDecimal(cash))
+                .marginBalance(BigDecimal.ZERO).updatedAt(Instant.now()).build()));
+    }
+
+    private void verifyRejectionAudited(RejectionReason reason) {
+        verify(tradeAuditRecorder).recordRejection(argThat(audit ->
+            audit.getStatus() == NovationStatus.REJECTED && audit.getRejectionReason() == reason));
+        verify(rawTradeAuditRepository, never()).save(any());
     }
 }

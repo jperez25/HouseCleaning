@@ -10,4 +10,5 @@ import java.util.List;
 public interface NovatedContractRepository extends JpaRepository<NovatedContract, String> {
     List<NovatedContract> findByExternalTradeId(String externalTradeId);
     List<NovatedContract> findByClearingMemberId(String clearingMemberId);
+    boolean existsByExternalTradeId(String externalTradeId);
 }

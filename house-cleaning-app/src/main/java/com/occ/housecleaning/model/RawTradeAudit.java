@@ -1,7 +1,11 @@
 package com.occ.housecleaning.model;
 
+import com.occ.housecleaning.dto.NovationStatus;
+import com.occ.housecleaning.dto.RejectionReason;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -42,6 +46,11 @@ public class RawTradeAudit {
     @Column(name = "received_at", nullable = false)
     private Instant receivedAt;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
-    private String status;
+    private NovationStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rejection_reason", length = 32)
+    private RejectionReason rejectionReason;
 }

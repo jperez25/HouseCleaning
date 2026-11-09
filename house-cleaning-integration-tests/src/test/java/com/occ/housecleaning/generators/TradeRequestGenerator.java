@@ -43,6 +43,15 @@ public class TradeRequestGenerator {
     }
 
     /**
+     * Generator helper to create a valid random TradeRequest.
+     */
+    public static TradeRequest createEmptyTradeRequest() {
+        return new TradeRequest(
+                "", "", "", -1, BigDecimal.ZERO, "BUYER1", "SELLER1", java.time.Instant.now()
+        );
+    }
+
+    /**
      * Generates a batch of valid {@link TradeRequest}s with randomized data.
      *
      * @param count the number of requests to generate

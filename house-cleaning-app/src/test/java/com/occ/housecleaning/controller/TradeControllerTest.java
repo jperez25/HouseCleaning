@@ -3,6 +3,8 @@ package com.occ.housecleaning.controller;
 import com.occ.housecleaning.dto.ContractLeg;
 import com.occ.housecleaning.dto.LegType;
 import com.occ.housecleaning.dto.NovationStatus;
+import com.occ.housecleaning.dto.RejectionReason;
+import com.occ.housecleaning.exception.TradeRejectedException;
 import com.occ.housecleaning.dto.TradeNovationResponse;
 import com.occ.housecleaning.dto.TradeRequest;
 import com.occ.housecleaning.service.ClearingService;
@@ -16,9 +18,11 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -101,7 +105,10 @@ class TradeControllerTest {
         mockMvc.perform(post("/api/v1/trades/novate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(invalidJson))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Bad Request"))
+            .andExpect(jsonPath("$.message").value("Request validation failed"))
+            .andExpect(jsonPath("$.validationErrors.externalTradeId").value("externalTradeId is required"));
     }
 
     @Test
@@ -124,5 +131,83 @@ class TradeControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(selfTradeJson))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Unexpected service errors should return a generic 500 response")
+    void unexpectedServiceErrorReturnsGeneric500() throws Exception {
+        when(clearingService.novateTrade(any(TradeRequest.class)))
+                .thenThrow(new IllegalStateException("internal database details"));
+
+        String validJson = """
+            {
+              "externalTradeId": "EXCH-2026-98123",
+              "exchangeCode": "CBOE",
+              "optionSymbol": "AAPL260619C00150000",
+              "quantity": 10,
+              "executionPrice": 4.50,
+              "buyerMemberId": "MEM-101",
+              "sellerMemberId": "MEM-202",
+              "executionTimestamp": "2026-11-05T15:30:00Z"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/trades/novate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(validJson))
+            .andExpect(status().isInternalServerError())
+            .andExpect(jsonPath("$.message").value("An unexpected error occurred"));
+    }
+
+    @Test
+    @DisplayName("Missing trade audit should return a structured 404 response")
+    void missingTradeAuditReturns404() throws Exception {
+        when(clearingService.getTradeAudit("missing-trade")).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/v1/trades/missing-trade/audit"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("Not Found"))
+            .andExpect(jsonPath("$.message").value("Trade audit not found"))
+            .andExpect(jsonPath("$.path").value("/api/v1/trades/missing-trade/audit"));
+    }
+
+    private static final String VALID_JSON = """
+        {
+          "externalTradeId": "EXCH-2026-98123",
+          "exchangeCode": "CBOE",
+          "optionSymbol": "AAPL260619C00150000",
+          "quantity": 10,
+          "executionPrice": 4.50,
+          "buyerMemberId": "MEM-101",
+          "sellerMemberId": "MEM-202",
+          "executionTimestamp": "2026-11-05T15:30:00Z"
+        }
+        """;
+
+    @Test
+    @DisplayName("Duplicate trade should return 409 Conflict with DUPLICATE_TRADE code")
+    void duplicateTradeReturns409() throws Exception {
+        when(clearingService.novateTrade(any(TradeRequest.class)))
+                .thenThrow(new TradeRejectedException(RejectionReason.DUPLICATE_TRADE, "already novated"));
+
+        mockMvc.perform(post("/api/v1/trades/novate").contentType(MediaType.APPLICATION_JSON).content(VALID_JSON))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("DUPLICATE_TRADE"))
+            .andExpect(jsonPath("$.message").value("already novated"));
+    }
+
+    @Test
+    @DisplayName("Unknown member and insufficient funds should return 422 with their business codes")
+    void rejectedTradesReturn422() throws Exception {
+        when(clearingService.novateTrade(any(TradeRequest.class)))
+                .thenThrow(new TradeRejectedException(RejectionReason.UNKNOWN_MEMBER, "not registered"))
+                .thenThrow(new TradeRejectedException(RejectionReason.INSUFFICIENT_FUNDS, "too poor"));
+
+        mockMvc.perform(post("/api/v1/trades/novate").contentType(MediaType.APPLICATION_JSON).content(VALID_JSON))
+            .andExpect(status().isUnprocessableContent())
+            .andExpect(jsonPath("$.code").value("UNKNOWN_MEMBER"));
+        mockMvc.perform(post("/api/v1/trades/novate").contentType(MediaType.APPLICATION_JSON).content(VALID_JSON))
+            .andExpect(status().isUnprocessableContent())
+            .andExpect(jsonPath("$.code").value("INSUFFICIENT_FUNDS"));
     }
 }

@@ -83,6 +83,24 @@ fields. Soft assertion failures are reported by the method that validates that
 response; use a separate shared `SoftAssertions` instance for supplementary
 assertions outside the validator.
 
+## Test Class Organization
+
+Split each feature's tests into separate classes by intent:
+
+- **`<Feature>PositiveTest`** — valid requests and successful retrieval.
+- **`<Feature>NegativeTest`** — invalid input, business-rule rejections and
+  missing resources.
+
+Test methods contain no assertions of their own. Every check lives in a
+`TradeValidator` method (or an equivalent shared validator) and is invoked
+through the fluent chain, so assertion rules are defined once and reused. When a
+test needs a check that does not exist yet, add a validator method rather than
+asserting inline.
+
+Data that must stay deterministic when tests run in parallel should use
+members reserved for a single scenario (for example `MEM-LOWCREDIT`); do not
+assert exact balances on the shared member pool.
+
 ## Quality Expectations
 
 - Tests should exercise the externally reachable service contract.

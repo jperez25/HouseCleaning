@@ -11,6 +11,7 @@ import com.occ.housecleaning.validators.TradeValidator;
 import org.testng.SkipException;
 import org.testng.annotations.BeforeClass;
 
+import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
@@ -85,12 +86,6 @@ public abstract class AbstractTest {
         }
     }
 
-    /**
-     * Generator helper to create a valid random TradeRequest.
-     */
-    protected TradeRequest createRandomTradeRequest() {
-        return TradeRequestGenerator.createRandomTradeRequest();
-    }
 
     /**
      * Generator helper to create a batch of valid random TradeRequests.

@@ -73,4 +73,12 @@ public class TradeApiClient {
     public Response getMemberLedger(String memberId) {
         return given().get("/api/v1/members/" + memberId + "/ledger");
     }
+
+    /**
+     * Sends a GET request to /api/v1/members/{memberId}/ledger with explicit pagination.
+     */
+    public Response getMemberLedger(String memberId, int page, int size) {
+        return given().queryParam("page", page).queryParam("size", size)
+                .get("/api/v1/members/" + memberId + "/ledger");
+    }
 }

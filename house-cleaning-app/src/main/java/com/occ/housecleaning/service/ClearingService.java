@@ -3,22 +3,28 @@ package com.occ.housecleaning.service;
 import com.occ.housecleaning.dto.ContractLeg;
 import com.occ.housecleaning.dto.LegType;
 import com.occ.housecleaning.dto.NovationStatus;
+import com.occ.housecleaning.dto.RejectionReason;
 import com.occ.housecleaning.dto.TradeNovationResponse;
 import com.occ.housecleaning.dto.TradeRequest;
+import com.occ.housecleaning.exception.TradeRejectedException;
+import com.occ.housecleaning.model.Member;
 import com.occ.housecleaning.model.MemberLedgerBalance;
 import com.occ.housecleaning.model.MemberLedgerEntry;
 import com.occ.housecleaning.model.NovatedContract;
 import com.occ.housecleaning.model.RawTradeAudit;
 import com.occ.housecleaning.repository.MemberLedgerBalanceRepository;
 import com.occ.housecleaning.repository.MemberLedgerEntryRepository;
+import com.occ.housecleaning.repository.MemberRepository;
 import com.occ.housecleaning.repository.NovatedContractRepository;
 import com.occ.housecleaning.repository.RawTradeAuditRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -38,6 +44,8 @@ public class ClearingService {
     private final NovatedContractRepository novatedContractRepository;
     private final MemberLedgerBalanceRepository memberLedgerBalanceRepository;
     private final MemberLedgerEntryRepository memberLedgerEntryRepository;
+    private final MemberRepository memberRepository;
+    private final TradeAuditRecorder tradeAuditRecorder;
     private final ObjectMapper objectMapper;
 
     public ClearingService(
@@ -45,164 +53,186 @@ public class ClearingService {
             NovatedContractRepository novatedContractRepository,
             MemberLedgerBalanceRepository memberLedgerBalanceRepository,
             MemberLedgerEntryRepository memberLedgerEntryRepository,
+            MemberRepository memberRepository,
+            TradeAuditRecorder tradeAuditRecorder,
             ObjectMapper objectMapper) {
         this.rawTradeAuditRepository = rawTradeAuditRepository;
         this.novatedContractRepository = novatedContractRepository;
         this.memberLedgerBalanceRepository = memberLedgerBalanceRepository;
         this.memberLedgerEntryRepository = memberLedgerEntryRepository;
-        this.objectMapper = objectMapper != null ? objectMapper : new JsonMapper();
+        this.memberRepository = memberRepository;
+        this.tradeAuditRecorder = tradeAuditRecorder;
+        this.objectMapper = objectMapper;
     }
 
     /**
-     * Novates an inbound trade execution by interposing OCC as the central counterparty:
-     * - Records the raw payload in raw_trades_audit for regulatory compliance and audit trails.
-     * - Inserts Leg 1 and Leg 2 into novated_contracts linking them to their clearing members.
-     * - Updates buyer and seller cash ledger balances immediately for option premium exchange.
-     *
-     * @param tradeRequest incoming trade execution request
-     * @return trade novation response containing the two novated contract legs
+     * Novates an inbound trade execution by interposing OCC as the central counterparty.
+     * <p>
+     * Business rules, evaluated before any state changes:
+     * <ol>
+     *   <li>The external trade id must not already be novated (409 DUPLICATE_TRADE).</li>
+     *   <li>Buyer and seller must be registered (UNKNOWN_MEMBER) and active (INACTIVE_MEMBER), both 422.</li>
+     *   <li>The buyer's cash balance after paying the premium may not fall below minus their credit limit
+     *       (INSUFFICIENT_FUNDS, 422). This check runs under a row lock, so it is safe under concurrency.</li>
+     * </ol>
+     * Every rejection is audited with status REJECTED in a separate transaction so it survives rollback.
+     * On success the audit record, both contract legs and both ledger movements commit atomically.
      */
     @Transactional
     public TradeNovationResponse novateTrade(TradeRequest tradeRequest) {
         Objects.requireNonNull(tradeRequest, "tradeRequest cannot be null");
-        log.info("Novating trade: {}", tradeRequest.externalTradeId());
+        final String tradeId = tradeRequest.externalTradeId();
+        log.info("Novating trade: {}", tradeId);
 
         Instant now = Instant.now();
 
-        // 1. Audit inbound raw payload for regulatory compliance
-        String rawPayload;
-        try {
-            rawPayload = objectMapper.writeValueAsString(tradeRequest);
-        } catch (Exception e) {
-            log.warn("Failed to serialize tradeRequest with Jackson, falling back to toString()", e);
-            rawPayload = tradeRequest.toString();
+        if (novatedContractRepository.existsByExternalTradeId(tradeId)) {
+            throw reject(tradeRequest, RejectionReason.DUPLICATE_TRADE, now,
+                    "Trade " + tradeId + " has already been novated");
         }
 
-        RawTradeAudit auditRecord = RawTradeAudit.builder()
-                .externalTradeId(tradeRequest.externalTradeId())
-                .exchangeCode(tradeRequest.exchangeCode())
-                .rawPayload(rawPayload)
-                .receivedAt(now)
-                .status("NOVATED")
-                .build();
-        rawTradeAuditRepository.save(auditRecord);
+        Member buyer = requireActiveMember(tradeRequest, tradeRequest.buyerMemberId(), now);
+        Member seller = requireActiveMember(tradeRequest, tradeRequest.sellerMemberId(), now);
 
-        // 2. Generate Leg 1 (Buyer-facing) and Leg 2 (Seller-facing)
-        String buyerLegId = "LEG-" + UUID.randomUUID();
-        String sellerLegId = "LEG-" + UUID.randomUUID();
-
-        ContractLeg buyerLeg = new ContractLeg(
-                buyerLegId,
-                tradeRequest.externalTradeId(),
-                LegType.BUYER_LEG,
-                tradeRequest.buyerMemberId(),
-                OCC_PARTICIPANT_ID,
-                tradeRequest.optionSymbol(),
-                tradeRequest.quantity(),
-                tradeRequest.executionPrice(),
-                tradeRequest.executionTimestamp(),
-                NovationStatus.NOVATED
-        );
-
-        ContractLeg sellerLeg = new ContractLeg(
-                sellerLegId,
-                tradeRequest.externalTradeId(),
-                LegType.SELLER_LEG,
-                OCC_PARTICIPANT_ID,
-                tradeRequest.sellerMemberId(),
-                tradeRequest.optionSymbol(),
-                tradeRequest.quantity(),
-                tradeRequest.executionPrice(),
-                tradeRequest.executionTimestamp(),
-                NovationStatus.NOVATED
-        );
-
-        // Persist Leg 1 and Leg 2 into novated_contracts
-        NovatedContract buyerContract = NovatedContract.builder()
-                .legId(buyerLegId)
-                .externalTradeId(tradeRequest.externalTradeId())
-                .legType(LegType.BUYER_LEG)
-                .clearingMemberId(tradeRequest.buyerMemberId())
-                .counterpartyId(OCC_PARTICIPANT_ID)
-                .buyerMemberId(tradeRequest.buyerMemberId())
-                .sellerMemberId(OCC_PARTICIPANT_ID)
-                .optionSymbol(tradeRequest.optionSymbol())
-                .quantity(tradeRequest.quantity())
-                .executionPrice(tradeRequest.executionPrice())
-                .executionTimestamp(tradeRequest.executionTimestamp())
-                .novatedAt(now)
-                .status(NovationStatus.NOVATED)
-                .build();
-
-        NovatedContract sellerContract = NovatedContract.builder()
-                .legId(sellerLegId)
-                .externalTradeId(tradeRequest.externalTradeId())
-                .legType(LegType.SELLER_LEG)
-                .clearingMemberId(tradeRequest.sellerMemberId())
-                .counterpartyId(OCC_PARTICIPANT_ID)
-                .buyerMemberId(OCC_PARTICIPANT_ID)
-                .sellerMemberId(tradeRequest.sellerMemberId())
-                .optionSymbol(tradeRequest.optionSymbol())
-                .quantity(tradeRequest.quantity())
-                .executionPrice(tradeRequest.executionPrice())
-                .executionTimestamp(tradeRequest.executionTimestamp())
-                .novatedAt(now)
-                .status(NovationStatus.NOVATED)
-                .build();
-
-        novatedContractRepository.saveAll(List.of(buyerContract, sellerContract));
-
-        // 3. Settle immediate cash premium across member ledger balances
         BigDecimal totalPremium = tradeRequest.executionPrice()
                 .multiply(BigDecimal.valueOf(tradeRequest.quantity()))
                 .multiply(CONTRACT_MULTIPLIER);
 
-        updateMemberBalance(tradeRequest.buyerMemberId(), tradeRequest.externalTradeId(), totalPremium.negate(), "DEBIT", "Option premium paid", now);
-        updateMemberBalance(tradeRequest.sellerMemberId(), tradeRequest.externalTradeId(), totalPremium, "CREDIT", "Option premium received", now);
+        // Lock both balances in a fixed (sorted) order so opposing trades cannot deadlock.
+        MemberLedgerBalance buyerBalance;
+        MemberLedgerBalance sellerBalance;
+        if (buyer.getMemberId().compareTo(seller.getMemberId()) <= 0) {
+            buyerBalance = lockBalance(buyer.getMemberId());
+            sellerBalance = lockBalance(seller.getMemberId());
+        } else {
+            sellerBalance = lockBalance(seller.getMemberId());
+            buyerBalance = lockBalance(buyer.getMemberId());
+        }
+
+        BigDecimal buyerCashAfter = buyerBalance.getCashBalance().subtract(totalPremium);
+        if (buyerCashAfter.compareTo(buyer.getCreditLimit().negate()) < 0) {
+            throw reject(tradeRequest, RejectionReason.INSUFFICIENT_FUNDS, now,
+                    "Member " + buyer.getMemberId() + " has insufficient funds for premium " + totalPremium);
+        }
+
+        rawTradeAuditRepository.save(buildAudit(tradeRequest, NovationStatus.NOVATED, null, now));
+
+        String buyerLegId = "LEG-" + UUID.randomUUID();
+        String sellerLegId = "LEG-" + UUID.randomUUID();
+
+        ContractLeg buyerLeg = new ContractLeg(
+                buyerLegId, tradeId, LegType.BUYER_LEG,
+                tradeRequest.buyerMemberId(), OCC_PARTICIPANT_ID,
+                tradeRequest.optionSymbol(), tradeRequest.quantity(), tradeRequest.executionPrice(),
+                tradeRequest.executionTimestamp(), NovationStatus.NOVATED);
+
+        ContractLeg sellerLeg = new ContractLeg(
+                sellerLegId, tradeId, LegType.SELLER_LEG,
+                OCC_PARTICIPANT_ID, tradeRequest.sellerMemberId(),
+                tradeRequest.optionSymbol(), tradeRequest.quantity(), tradeRequest.executionPrice(),
+                tradeRequest.executionTimestamp(), NovationStatus.NOVATED);
+
+        NovatedContract buyerContract = toContract(buyerLeg, tradeRequest.buyerMemberId(), now);
+        NovatedContract sellerContract = toContract(sellerLeg, tradeRequest.sellerMemberId(), now);
+
+        try {
+            // Flush now so the (external_trade_id, leg_type) unique constraint fires inside this method.
+            novatedContractRepository.saveAllAndFlush(List.of(buyerContract, sellerContract));
+        } catch (DataIntegrityViolationException e) {
+            throw reject(tradeRequest, RejectionReason.DUPLICATE_TRADE, now,
+                    "Trade " + tradeId + " has already been novated");
+        }
+
+        applyLedgerMovement(buyerBalance, tradeId, totalPremium.negate(), "DEBIT", "Option premium paid", now);
+        applyLedgerMovement(sellerBalance, tradeId, totalPremium, "CREDIT", "Option premium received", now);
 
         log.info("Trade {} novated successfully into Leg 1 (OCC -> {}) and Leg 2 ({} -> OCC) with premium ${}",
-                tradeRequest.externalTradeId(),
-                buyerLeg.buyerMemberId(),
-                sellerLeg.sellerMemberId(),
-                totalPremium);
+                tradeId, buyerLeg.buyerMemberId(), sellerLeg.sellerMemberId(), totalPremium);
 
-        return new TradeNovationResponse(
-                tradeRequest.externalTradeId(),
-                NovationStatus.NOVATED,
-                now,
-                buyerLeg,
-                sellerLeg
-        );
+        return new TradeNovationResponse(tradeId, NovationStatus.NOVATED, now, buyerLeg, sellerLeg);
     }
 
-    private void updateMemberBalance(String memberId, String tradeId, BigDecimal netCashChange, String entryType, String description, Instant now) {
-        MemberLedgerBalance ledgerBalance = memberLedgerBalanceRepository.findByMemberId(memberId)
-                .orElseGet(() -> MemberLedgerBalance.builder()
-                        .memberId(memberId)
-                        .cashBalance(BigDecimal.ZERO)
-                        .marginBalance(BigDecimal.ZERO)
-                        .updatedAt(now)
-                        .build());
+    private Member requireActiveMember(TradeRequest request, String memberId, Instant now) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> reject(request, RejectionReason.UNKNOWN_MEMBER, now,
+                        "Clearing member " + memberId + " is not registered"));
+        if (!member.isActive()) {
+            throw reject(request, RejectionReason.INACTIVE_MEMBER, now,
+                    "Clearing member " + memberId + " is not active");
+        }
+        return member;
+    }
 
-        BigDecimal newCashBalance = ledgerBalance.getCashBalance().add(netCashChange);
-        ledgerBalance.setCashBalance(newCashBalance);
-        ledgerBalance.setUpdatedAt(now);
-        memberLedgerBalanceRepository.save(ledgerBalance);
+    private MemberLedgerBalance lockBalance(String memberId) {
+        return memberLedgerBalanceRepository.findByMemberIdForUpdate(memberId)
+                .orElseThrow(() -> new IllegalStateException("Ledger balance missing for member " + memberId));
+    }
 
-        MemberLedgerEntry entry = MemberLedgerEntry.builder()
-                .memberId(memberId)
+    private TradeRejectedException reject(TradeRequest request, RejectionReason reason, Instant now, String message) {
+        log.warn("Rejecting trade {}: {} - {}", request.externalTradeId(), reason, message);
+        tradeAuditRecorder.recordRejection(buildAudit(request, NovationStatus.REJECTED, reason, now));
+        return new TradeRejectedException(reason, message);
+    }
+
+    private RawTradeAudit buildAudit(TradeRequest request, NovationStatus status, RejectionReason reason, Instant now) {
+        String rawPayload;
+        try {
+            rawPayload = objectMapper.writeValueAsString(request);
+        } catch (Exception e) {
+            log.warn("Failed to serialize tradeRequest with Jackson, falling back to toString()", e);
+            rawPayload = request.toString();
+        }
+        return RawTradeAudit.builder()
+                .externalTradeId(request.externalTradeId())
+                .exchangeCode(request.exchangeCode())
+                .rawPayload(rawPayload)
+                .receivedAt(now)
+                .status(status)
+                .rejectionReason(reason)
+                .build();
+    }
+
+    private NovatedContract toContract(ContractLeg leg, String clearingMemberId, Instant novatedAt) {
+        return NovatedContract.builder()
+                .legId(leg.legId())
+                .externalTradeId(leg.externalTradeId())
+                .legType(leg.legType())
+                .clearingMemberId(clearingMemberId)
+                .counterpartyId(OCC_PARTICIPANT_ID)
+                .buyerMemberId(leg.buyerMemberId())
+                .sellerMemberId(leg.sellerMemberId())
+                .optionSymbol(leg.optionSymbol())
+                .quantity(leg.quantity())
+                .executionPrice(leg.executionPrice())
+                .executionTimestamp(leg.executionTimestamp())
+                .novatedAt(novatedAt)
+                .status(NovationStatus.NOVATED)
+                .build();
+    }
+
+    private void applyLedgerMovement(MemberLedgerBalance balance, String tradeId, BigDecimal netCashChange,
+                                     String entryType, String description, Instant now) {
+        BigDecimal newCashBalance = balance.getCashBalance().add(netCashChange);
+        balance.setCashBalance(newCashBalance);
+        balance.setUpdatedAt(now);
+        memberLedgerBalanceRepository.save(balance);
+
+        memberLedgerEntryRepository.save(MemberLedgerEntry.builder()
+                .memberId(balance.getMemberId())
                 .externalTradeId(tradeId)
                 .entryType(entryType)
                 .amount(netCashChange.abs())
                 .balanceAfter(newCashBalance)
                 .description(description + " for trade " + tradeId)
                 .createdAt(now)
-                .build();
-        memberLedgerEntryRepository.save(entry);
+                .build());
     }
 
+    /** Returns the NOVATED audit if the trade was novated, otherwise the most recent (rejected) attempt. */
     public Optional<RawTradeAudit> getTradeAudit(String externalTradeId) {
-        return rawTradeAuditRepository.findByExternalTradeId(externalTradeId);
+        return rawTradeAuditRepository
+                .findFirstByExternalTradeIdAndStatusOrderByIdDesc(externalTradeId, NovationStatus.NOVATED)
+                .or(() -> rawTradeAuditRepository.findFirstByExternalTradeIdOrderByIdDesc(externalTradeId));
     }
 
     public List<NovatedContract> getNovatedContracts(String externalTradeId) {
@@ -213,7 +243,11 @@ public class ClearingService {
         return memberLedgerBalanceRepository.findByMemberId(memberId);
     }
 
-    public List<MemberLedgerEntry> getMemberLedgerEntries(String memberId) {
-        return memberLedgerEntryRepository.findByMemberId(memberId);
+    public boolean memberExists(String memberId) {
+        return memberRepository.existsById(memberId);
+    }
+
+    public Page<MemberLedgerEntry> getMemberLedgerEntries(String memberId, Pageable pageable) {
+        return memberLedgerEntryRepository.findByMemberId(memberId, pageable);
     }
 }
