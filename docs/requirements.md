@@ -16,11 +16,13 @@ in PostgreSQL.
 
 Calculate dynamic margin requirements based on position volume and simulated
 market-volatility changes. Update clearing-member ledger balances atomically.
+Details: [risk-and-settlement.md](risk-and-settlement.md).
 
 ### Settlement and Clearing Ledger
 
 Provide endpoints to query settled positions, trade logs, and account cash
 balances with strict transactional integrity.
+Details: [risk-and-settlement.md](risk-and-settlement.md).
 
 ## Test Architecture and Automation Requirements
 

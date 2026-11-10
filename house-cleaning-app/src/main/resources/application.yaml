@@ -18,3 +18,8 @@ spring:
     console:
       enabled: true
       path: /h2-console
+
+risk:
+  volatility:
+    # Simulated volatility factor applied to margin when no shock has been set (POST /api/v1/risk/volatility).
+    base-factor: 0.10

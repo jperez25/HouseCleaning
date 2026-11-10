@@ -43,6 +43,10 @@ module has no implementation, and starter application sources are duplicated.
 - Define margin-call triggers.
 - Test boundary conditions and concurrent updates.
 
+Status: implemented and covered by unit and Spring-context tests in
+`house-cleaning-app` (margin boundaries, atomic rollback, shocks). Not yet
+covered by the REST Assured suite. See [risk-and-settlement.md](risk-and-settlement.md).
+
 ## 5. Implement settlement and ledger queries
 
 - Implement settlement processing for cash, options exercise/assignment,
@@ -51,6 +55,12 @@ module has no implementation, and starter application sources are duplicated.
 - Provide endpoints for settled positions, trade logs, and cash balances.
 - Verify that failures in multi-step transactions roll back all related
   changes.
+
+Status: implemented for options only (settlement status transitions, cash-settled
+exercise with pro-rata assignment, paginated position, trade-log and
+settlement-exception queries). Futures delivery and securities lending are out
+of scope. Not yet covered by the REST Assured suite. See
+[risk-and-settlement.md](risk-and-settlement.md).
 
 ## 6. Build the test framework alongside the services
 

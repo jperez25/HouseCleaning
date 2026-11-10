@@ -1,6 +1,17 @@
 package com.occ.housecleaning.dto;
 
+/**
+ * Lifecycle of a trade, shared by the raw audit and the contract legs.
+ * <pre>
+ *   (audit)  NOVATED | REJECTED
+ *   (legs)   NOVATED -> SETTLED
+ *            NOVATED -> FAILED -> SETTLED   (a failed settlement can be retried)
+ * </pre>
+ * SETTLED is terminal.
+ */
 public enum NovationStatus {
     NOVATED,
-    REJECTED
+    REJECTED,
+    SETTLED,
+    FAILED
 }

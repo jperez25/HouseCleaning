@@ -21,6 +21,9 @@ continuously calculates and collects collateral.
 - **Clearing fund:** OCC maintains a pool of pre-funded collateral shared across
   members to absorb catastrophic market shocks.
 
+See [risk-and-settlement.md](risk-and-settlement.md) for how this project
+implements positions, margin, margin calls and settlement.
+
 ## Settlement and Delivery
 
 Clearing is not just about recording a trade; it is also about completing it.

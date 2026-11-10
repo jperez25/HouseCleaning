@@ -57,6 +57,9 @@ class ClearingServiceTest {
     @Mock
     private TradeAuditRecorder tradeAuditRecorder;
 
+    @Mock
+    private RiskService riskService;
+
     private ClearingService clearingService;
 
     @BeforeEach
@@ -68,6 +71,7 @@ class ClearingServiceTest {
             memberLedgerEntryRepository,
             memberRepository,
             tradeAuditRecorder,
+            riskService,
             new JsonMapper()
         );
     }
@@ -232,6 +236,24 @@ class ClearingServiceTest {
         TradeNovationResponse response = clearingService.novateTrade(request("MEM-101", "MEM-202", "4.50"));
 
         assertThat(response.status()).isEqualTo(NovationStatus.NOVATED);
+    }
+
+    @Test
+    @DisplayName("Should hand the novated trade to the risk engine, and not on rejection")
+    void shouldInvokeRiskEngineOnlyOnSuccess() {
+        givenMember("MEM-101", true, "1000000");
+        givenMember("MEM-202", true, "1000000");
+        givenBalance("MEM-101", "0");
+        givenBalance("MEM-202", "0");
+
+        clearingService.novateTrade(request("MEM-101", "MEM-202", "4.50"));
+        verify(riskService).onNovation(any(), any(), any(), any());
+
+        org.mockito.Mockito.clearInvocations(riskService);
+        givenMember("MEM-202", false, "1000000");
+        assertThatThrownBy(() -> clearingService.novateTrade(request("MEM-101", "MEM-202", "4.50")))
+            .isInstanceOf(TradeRejectedException.class);
+        verify(riskService, never()).onNovation(any(), any(), any(), any());
     }
 
     private TradeRequest request(String buyer, String seller, String price) {

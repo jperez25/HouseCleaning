@@ -70,4 +70,8 @@ public class NovatedContract {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private NovationStatus status;
+
+    /** Set when the leg reaches SETTLED. */
+    @Column(name = "settled_at")
+    private Instant settledAt;
 }

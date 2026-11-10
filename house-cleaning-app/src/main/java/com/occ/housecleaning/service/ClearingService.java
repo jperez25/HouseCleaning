@@ -46,6 +46,7 @@ public class ClearingService {
     private final MemberLedgerEntryRepository memberLedgerEntryRepository;
     private final MemberRepository memberRepository;
     private final TradeAuditRecorder tradeAuditRecorder;
+    private final RiskService riskService;
     private final ObjectMapper objectMapper;
 
     public ClearingService(
@@ -55,6 +56,7 @@ public class ClearingService {
             MemberLedgerEntryRepository memberLedgerEntryRepository,
             MemberRepository memberRepository,
             TradeAuditRecorder tradeAuditRecorder,
+            RiskService riskService,
             ObjectMapper objectMapper) {
         this.rawTradeAuditRepository = rawTradeAuditRepository;
         this.novatedContractRepository = novatedContractRepository;
@@ -62,6 +64,7 @@ public class ClearingService {
         this.memberLedgerEntryRepository = memberLedgerEntryRepository;
         this.memberRepository = memberRepository;
         this.tradeAuditRecorder = tradeAuditRecorder;
+        this.riskService = riskService;
         this.objectMapper = objectMapper;
     }
 
@@ -76,7 +79,8 @@ public class ClearingService {
      *       (INSUFFICIENT_FUNDS, 422). This check runs under a row lock, so it is safe under concurrency.</li>
      * </ol>
      * Every rejection is audited with status REJECTED in a separate transaction so it survives rollback.
-     * On success the audit record, both contract legs and both ledger movements commit atomically.
+     * On success the audit record, both contract legs, both ledger movements, the position updates, the margin
+     * recalculation and any margin call commit atomically.
      */
     @Transactional
     public TradeNovationResponse novateTrade(TradeRequest tradeRequest) {
@@ -145,6 +149,9 @@ public class ClearingService {
 
         applyLedgerMovement(buyerBalance, tradeId, totalPremium.negate(), "DEBIT", "Option premium paid", now);
         applyLedgerMovement(sellerBalance, tradeId, totalPremium, "CREDIT", "Option premium received", now);
+
+        // Same transaction: if position, margin or margin-call handling fails, the whole novation rolls back.
+        riskService.onNovation(tradeRequest, buyerBalance, sellerBalance, now);
 
         log.info("Trade {} novated successfully into Leg 1 (OCC -> {}) and Leg 2 ({} -> OCC) with premium ${}",
                 tradeId, buyerLeg.buyerMemberId(), sellerLeg.sellerMemberId(), totalPremium);
