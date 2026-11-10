@@ -31,6 +31,11 @@ public class TradeRequestGenerator {
         "MEM-101", "MEM-102", "MEM-201", "MEM-202", "MEM-301", "MEM-302", "MEM-401", "MEM-402", "MEM-501", "MEM-502"
     };
 
+    private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER =
+            new com.fasterxml.jackson.databind.ObjectMapper()
+                    .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+                    .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyMMdd");
 
     /**
@@ -222,6 +227,14 @@ public class TradeRequestGenerator {
         public Builder withExecutionTimestamp(Instant executionTimestamp) {
             this.executionTimestamp = executionTimestamp;
             return this;
+        }
+
+        /**
+         * Builds the request as a JSON-friendly Map (ISO-8601 timestamp). Used by Karate, which cannot
+         * serialize Java records on its own; Cucumber uses {@link #build()}.
+         */
+        public java.util.Map<String, Object> buildMap() {
+            return MAPPER.convertValue(build(), new com.fasterxml.jackson.core.type.TypeReference<>() { });
         }
 
         public TradeRequest build() {

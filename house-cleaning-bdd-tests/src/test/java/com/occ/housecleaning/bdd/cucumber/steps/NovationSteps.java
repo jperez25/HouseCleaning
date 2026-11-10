@@ -2,7 +2,7 @@ package com.occ.housecleaning.bdd.cucumber.steps;
 
 import com.occ.housecleaning.bdd.models.RejectionReason;
 import com.occ.housecleaning.bdd.support.TradeApiClient;
-import com.occ.housecleaning.bdd.support.TradeData;
+import com.occ.housecleaning.bdd.support.TestEnvironment;
 import com.occ.housecleaning.bdd.support.TradeRequestGenerator;
 import com.occ.housecleaning.bdd.support.TradeValidator;
 import io.cucumber.java.en.Given;
@@ -17,7 +17,7 @@ import io.cucumber.java.en.When;
 public class NovationSteps {
 
     private final TradeContext ctx = new TradeContext();
-    private final TradeApiClient tradeApiClient = new TradeApiClient(TradeData.baseUrl());
+    private final TradeApiClient tradeApiClient = new TradeApiClient(TestEnvironment.baseUrl());
     private final TradeValidator tradeValidator = new TradeValidator();
 
     // ---- Given ---------------------------------------------------------------------------------

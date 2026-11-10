@@ -3,7 +3,7 @@ Feature: Trade novation (Karate)
 
   Background:
     * url baseUrl
-    * def newTrade = function(buyer, seller){ return TradeData.validTrade(buyer, seller) }
+    * def newTrade = function(buyer, seller){ return TradeRequestGenerator.builder().withMembers(buyer, seller).buildMap() }
 
   @smoke
   Scenario: A valid trade is novated and auditable
@@ -43,13 +43,12 @@ Feature: Trade novation (Karate)
     And match response.code == 'UNKNOWN_MEMBER'
 
   Scenario Outline: Invalid quantity <quantity> is rejected
-    * def trade = newTrade('MEM-101', 'MEM-102')
-    * set trade.quantity = <quantity>
+    * def trade = TradeRequestGenerator.builder().withMembers('MEM-101', 'MEM-102').withQuantity(<quantity>).buildMap()
     Given path 'api/v1/trades/novate'
     And request trade
     When method post
     Then status 400
-    And match response.validationErrors contains { quantity: '#string' }
+    And match response.validationErrors.quantity == 'quantity must be greater than zero'
 
     Examples:
       | quantity |

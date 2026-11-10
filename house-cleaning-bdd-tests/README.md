@@ -10,7 +10,7 @@ Like the integration tests, these run against an already-running service; nothin
 | Runner | `bdd/cucumber/CucumberTest` | `bdd/karate/KarateTest` |
 | Reports | `target/cucumber-report.html` | `target/karate-reports` |
 
-Cucumber layering: `bdd/cucumber/steps` (thin glue) -> `bdd/support` (TradeApiClient, TradeRequestGenerator, TradeValidator; copied from the integration module on purpose) -> `bdd/models` (copied DTOs). `bdd/support/TradeData` is the Map-based data factory used by Karate via `Java.type`.
+Cucumber layering: `bdd/cucumber/steps` (thin glue) -> `bdd/support` (TradeApiClient, TradeRequestGenerator, TradeValidator; copied from the integration module on purpose) -> `bdd/models` (copied DTOs). Karate calls `TradeRequestGenerator` through `Java.type` (config) and uses `buildMap()` because it cannot serialize records.
 
 ## Run
 

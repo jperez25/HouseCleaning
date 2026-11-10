@@ -4,7 +4,7 @@ function fn() {
   karate.configure('readTimeout', 10000);
   return {
     baseUrl: baseUrl,
-    // Java interop: reuse the same random-data factory as the Cucumber side
-    TradeData: Java.type('com.occ.housecleaning.bdd.support.TradeData')
+    // Java interop: the same request generator the Cucumber steps use
+    TradeRequestGenerator: Java.type('com.occ.housecleaning.bdd.support.TradeRequestGenerator')
   };
 }
