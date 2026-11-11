@@ -1,0 +1,15 @@
+# DUMMY values for the CI/CD "dev" environment. Replace before use.
+image:
+  repository: registry.example.com/house-cleaning/house-cleaning-integration-tests
+  tag: "0.0.0-dummy"
+  pullPolicy: Always
+target:
+  baseUrl: https://house-cleaning.dev.example.com
+test:
+  activeDeadlineSeconds: 1800
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    memory: 2Gi

@@ -9,7 +9,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -39,7 +38,6 @@ public class RawTradeAudit {
     @Column(name = "exchange_code", nullable = false, length = 16)
     private String exchangeCode;
 
-    @Lob
     @Column(name = "raw_payload", nullable = false, columnDefinition = "TEXT")
     private String rawPayload;
 

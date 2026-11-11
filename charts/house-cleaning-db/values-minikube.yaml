@@ -1,0 +1,3 @@
+# Minikube: everything (db, app, tests) runs in the cluster.
+persistence:
+  size: 1Gi

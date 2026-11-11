@@ -1,0 +1,4 @@
+# Minikube + app run from IntelliJ: the test pod calls the app on the host machine.
+# host.minikube.internal resolves to the host from inside Minikube; the app must listen on 8080.
+target:
+  baseUrl: http://host.minikube.internal:8080

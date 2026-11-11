@@ -1,0 +1,25 @@
+# Active with SPRING_PROFILES_ACTIVE=k8s (set by the Kubernetes deployment). Uses PostgreSQL instead of H2.
+# The schema is created by charts/house-cleaning-db/files/02-schema.sql, so Hibernate only validates it.
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://house-cleaning-db.house-cleaning.svc.cluster.local:5432/housecleaning}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME:housecleaning}
+    password: ${DB_PASSWORD:housecleaning}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: ${DDL_AUTO:validate}
+  h2:
+    console:
+      enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true

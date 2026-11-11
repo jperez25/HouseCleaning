@@ -1,0 +1,17 @@
+# DUMMY values for the CI/CD "dev" environment. Replace before use.
+replicaCount: 2
+image:
+  repository: registry.example.com/house-cleaning/house-cleaning-app
+  tag: "0.0.0-dummy"
+  pullPolicy: Always
+database:
+  host: house-cleaning-db.dev.svc.cluster.local
+  credentialsSecret: house-cleaning-db-credentials
+service:
+  type: ClusterIP
+resources:
+  requests:
+    cpu: 500m
+    memory: 768Mi
+  limits:
+    memory: 1536Mi

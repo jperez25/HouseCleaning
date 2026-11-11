@@ -1,0 +1,30 @@
+# Shared defaults for every environment. Override per environment with values-<env>.yaml.
+image:
+  repository: postgres
+  tag: 17-alpine
+  pullPolicy: IfNotPresent
+
+auth:
+  database: housecleaning
+  username: housecleaning
+  password: housecleaning        # local default only; real environments use existingSecret
+  # Name of a pre-created Secret with POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD.
+  # When set, this chart does not create a Secret.
+  existingSecret: ""
+
+service:
+  type: ClusterIP
+  port: 5432
+  nodePort: null                 # only used when type=NodePort
+
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClass: ""               # "" = cluster default
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
