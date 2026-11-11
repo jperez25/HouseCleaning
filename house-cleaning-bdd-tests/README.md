@@ -10,6 +10,8 @@ Like the integration tests, these run against an already-running service; nothin
 | Runner | `bdd/cucumber/CucumberTest` | `bdd/karate/KarateTest` |
 | Reports | `target/cucumber-report.html` | `target/karate-reports` |
 
+Base URL (both frameworks, via `TestEnvironment`): `-Dtest.base.url`, else `TEST_BASE_URL`, else `http://localhost:8080`.
+
 Cucumber layering: `bdd/cucumber/steps` (thin glue) -> `bdd/support` (TradeApiClient, TradeRequestGenerator, TradeValidator; copied from the integration module on purpose) -> `bdd/models` (copied DTOs). Karate calls `TradeRequestGenerator` through `Java.type` (config) and uses `buildMap()` because it cannot serialize records.
 
 ## Run
