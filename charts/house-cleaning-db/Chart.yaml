@@ -1,0 +1,6 @@
+apiVersion: v2
+name: house-cleaning-db
+description: PostgreSQL for HouseCleaning (single replica; schema loaded from files/*.sql on first start)
+type: application
+version: 0.1.0
+appVersion: "17"

@@ -1,0 +1,9 @@
+# Every file in files/*.sql runs once, in name order, on first start of an empty data volume.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-init
+  labels:
+    app: {{ .Chart.Name }}
+data:
+{{ (.Files.Glob "files/*.sql").AsConfig | indent 2 }}

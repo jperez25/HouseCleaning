@@ -1,0 +1,2 @@
+# Minikube: everything (db, app, tests) runs in the cluster.
+replicaCount: 1

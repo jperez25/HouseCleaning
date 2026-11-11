@@ -1,0 +1,36 @@
+# Shared defaults for every environment. Override per environment with values-<env>.yaml.
+# Set enabled=false when the app runs somewhere else (e.g. from IntelliJ): the release then deploys nothing.
+enabled: true
+replicaCount: 1
+
+image:
+  repository: house-cleaning-app
+  tag: local
+  pullPolicy: IfNotPresent       # image is loaded with "minikube image load"
+
+springProfile: k8s
+
+database:
+  host: house-cleaning-db        # Service of the house-cleaning-db chart
+  port: 5432
+  name: housecleaning
+  url: ""                        # full JDBC URL; when set, host/port/name are ignored
+  # Secret holding the DB credentials (created by the db chart, or out-of-band).
+  credentialsSecret: house-cleaning-db-credentials
+  usernameKey: POSTGRES_USER
+  passwordKey: POSTGRES_PASSWORD
+
+service:
+  type: ClusterIP
+  port: 8080
+
+podAnnotations: {}               # deploy.sh sets one on Minikube so a rebuilt :local image rolls the pods
+
+extraEnv: []                     # e.g. [{name: RISK_VOLATILITY_BASE_FACTOR, value: "0.2"}]
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 384Mi
+  limits:
+    memory: 768Mi

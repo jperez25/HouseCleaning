@@ -1,0 +1,10 @@
+# Minikube + app run from IntelliJ on the host: only the DB lives in the cluster.
+# Reach it with scripts/port-forward.sh db -> jdbc:postgresql://localhost:5432/housecleaning
+persistence:
+  size: 1Gi
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 384Mi

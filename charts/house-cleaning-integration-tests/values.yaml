@@ -1,0 +1,20 @@
+# Shared defaults for every environment. Override per environment with values-<env>.yaml.
+# The release deploys nothing by itself: the test pod is a Helm test hook, run with `helm test <release>`.
+image:
+  repository: house-cleaning-integration-tests
+  tag: local
+  pullPolicy: IfNotPresent       # image is loaded with "minikube image load"
+
+target:
+  baseUrl: http://house-cleaning-app:8080   # the deployed app Service (exported to the pod as TEST_BASE_URL)
+
+test:
+  activeDeadlineSeconds: 600
+  extraArgs: []                  # extra Maven arguments, e.g. ["-Dcucumber.filter.tags=@smoke"]
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    memory: 1Gi

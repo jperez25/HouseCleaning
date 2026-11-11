@@ -1,0 +1,6 @@
+# Minikube + app run from IntelliJ on the host, so nothing is deployed for the app.
+# IntelliJ run configuration:
+#   Active profiles : k8s
+#   Environment     : DB_URL=jdbc:postgresql://localhost:5432/housecleaning
+#   (start the tunnel first: scripts/port-forward.sh db)
+enabled: false

@@ -1,0 +1,16 @@
+# DUMMY values for the CI/CD "dev" environment. Replace before use.
+image:
+  repository: registry.example.com/mirror/postgres
+  tag: "17-alpine"
+  pullPolicy: Always
+auth:
+  existingSecret: house-cleaning-db-credentials   # created out-of-band (e.g. by the pipeline / external secrets)
+persistence:
+  size: 10Gi
+  storageClass: standard
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    memory: 2Gi
