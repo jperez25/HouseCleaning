@@ -37,4 +37,11 @@
             <package name="com.occ.housecleaning.tests"/>
         </packages>
     </test>
+
+    <!-- Unit tests of the reporting package (they change system properties, so no parallelism). -->
+    <test name="Reporting-Unit" parallel="none">
+        <packages>
+            <package name="com.occ.housecleaning.reporting"/>
+        </packages>
+    </test>
 </suite>

@@ -17,9 +17,44 @@ spec:
       env:
         - name: TEST_BASE_URL
           value: {{ .Values.target.baseUrl | quote }}
+        - name: SEND_EMAIL
+          value: {{ .Values.report.sendEmail | quote }}
+        - name: REPORT_BASE_URL
+          value: {{ .Values.report.baseUrl | quote }}
+        {{- if .Values.report.sendEmail }}
+        - name: SMTP_HOST
+          value: {{ required "mail.host is required when report.sendEmail=true" .Values.mail.host | quote }}
+        - name: SMTP_PORT
+          value: {{ .Values.mail.port | quote }}
+        - name: SMTP_STARTTLS
+          value: {{ .Values.mail.starttls | quote }}
+        - name: MAIL_TO
+          value: {{ required "mail.to is required when report.sendEmail=true" .Values.mail.to | quote }}
+        - name: MAIL_FROM
+          value: {{ .Values.mail.from | quote }}
+        {{- $smtpSecret := .Values.mail.credentialsSecret | default (ternary (printf "%s-smtp" .Chart.Name) "" (ne (.Values.mail.password | default "") "")) }}
+        {{- if $smtpSecret }}
+        - name: SMTP_USERNAME
+          valueFrom: {secretKeyRef: {name: {{ $smtpSecret | quote }}, key: username}}
+        - name: SMTP_PASSWORD
+          valueFrom: {secretKeyRef: {name: {{ $smtpSecret | quote }}, key: password}}
+        {{- end }}
+        {{- end }}
       {{- with .Values.test.extraArgs }}
       args:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.results.hostPath }}
+      volumeMounts:
+        - name: allure-results
+          mountPath: /allure-results
+      {{- end }}
       resources:
         {{- toYaml .Values.resources | nindent 8 }}
+  {{- if .Values.results.hostPath }}
+  volumes:
+    - name: allure-results
+      hostPath:
+        path: {{ .Values.results.hostPath | quote }}
+        type: DirectoryOrCreate
+  {{- end }}

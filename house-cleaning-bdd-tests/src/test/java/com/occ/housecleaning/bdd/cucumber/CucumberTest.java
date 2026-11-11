@@ -13,6 +13,6 @@ import static io.cucumber.junit.platform.engine.Constants.PLUGIN_PROPERTY_NAME;
 @IncludeEngines("cucumber")
 @SelectClasspathResource("features/cucumber")
 @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.occ.housecleaning.bdd.cucumber.steps")
-@ConfigurationParameter(key = PLUGIN_PROPERTY_NAME, value = "pretty, html:target/cucumber-report.html")
+@ConfigurationParameter(key = PLUGIN_PROPERTY_NAME, value = "pretty, html:target/cucumber-report.html, io.qameta.allure.cucumber8jvm.AllureCucumber8Jvm")
 public class CucumberTest {
 }

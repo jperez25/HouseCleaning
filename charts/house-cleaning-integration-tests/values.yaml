@@ -12,6 +12,25 @@ test:
   activeDeadlineSeconds: 600
   extraArgs: []                  # extra Maven arguments, e.g. ["-Dcucumber.filter.tags=@smoke"]
 
+# Email a summary table (total, passed, failed, time) after the run. Off by default.
+# The report URL is a mock: nothing is uploaded, the link is built from report.baseUrl.
+report:
+  sendEmail: false
+  baseUrl: https://reports.example.com/house-cleaning
+# SMTP settings used when report.sendEmail=true. Placeholders: replace them (or override per environment).
+mail:
+  host: smtp.example.com
+  port: 587                      # 465 = implicit TLS, otherwise STARTTLS (unless starttls: false)
+  starttls: true
+  from: house-cleaning-ci@example.com
+  to: team@example.com
+  username: ""                   # empty = no SMTP auth
+  password: ""                   # DEV ONLY: stored in a Secret created by this chart. Do not commit real passwords:
+  credentialsSecret: ""          #   use an existing Secret with keys "username" and "password" instead
+
+results:
+  hostPath: ""                   # node directory that receives the Allure results (empty = not collected)
+
 resources:
   requests:
     cpu: 200m

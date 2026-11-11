@@ -1,0 +1,11 @@
+{
+  "sendEmail": false,
+  "reportBaseUrl": "https://reports.dev.example.com/house-cleaning",
+  "mail": {
+    "host": "smtp.example.com",
+    "port": 587,
+    "starttls": true,
+    "from": "house-cleaning-ci@example.com",
+    "to": "team@example.com"
+  }
+}

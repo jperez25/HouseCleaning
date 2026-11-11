@@ -15,6 +15,17 @@
     <description>API and integration tests for HouseCleaning</description>
 
     <dependencies>
+        <!-- reporting package: summary email after the run -->
+        <dependency>
+            <groupId>org.eclipse.angus</groupId>
+            <artifactId>angus-mail</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>com.occ</groupId>
             <artifactId>house-cleaning-common</artifactId>
@@ -36,6 +47,11 @@
         <dependency>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-testng</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

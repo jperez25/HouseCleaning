@@ -17,4 +17,7 @@ COPY house-cleaning-integration-tests/src house-cleaning-integration-tests/src
 # (e.g. the surefire JUnit provider) is fetched by Maven when the pod runs, so the pod needs access to a Maven repository.
 RUN ./mvnw -q -B -pl house-cleaning-integration-tests -am install -DskipTests \
  && ./mvnw -q -B -pl house-cleaning-integration-tests test -Dtest=NoSuchTest -Dsurefire.failIfNoSpecifiedTests=false
-ENTRYPOINT ["./mvnw", "-B", "-pl", "house-cleaning-integration-tests", "test"]
+ENV ALLURE_RESULTS_DIR=/allure-results
+RUN mkdir -p /allure-results
+# Allure results go to /allure-results (mount a volume there to collect them)
+ENTRYPOINT ["./mvnw", "-B", "-Dallure.results.directory=/allure-results", "-pl", "house-cleaning-integration-tests", "test"]

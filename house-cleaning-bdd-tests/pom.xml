@@ -78,6 +78,18 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Allure results: Cucumber plugin, and the JUnit Platform listener (covers the Karate scenarios) -->
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-cucumber8-jvm</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-junit-platform</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Karate 2.x (runs on the JUnit 6 platform; Karate 1.4.1 hung on JDK 25) -->
         <dependency>
             <groupId>io.karatelabs</groupId>

@@ -86,3 +86,33 @@ build_image() {
   docker build -f "$ROOT/$dockerfile" -t "$image:local" "$ROOT"
   minikube -p "$PROFILE" image load --overwrite=true "$image:local"
 }
+
+# ---- Environment config (house-cleaning-integration-tests/src/test/resources/configs/{environment,secured}.<env>.json) -----------------------
+# load_test_config sets CONFIG_ARGS: a generated Helm values file (-f) with report.* and mail.* from the JSON file
+# (typed, so booleans and numbers stay booleans and numbers), plus the Kubernetes Secret smtp-creds created from the
+# secured file. No-op when the files are missing; needs jq otherwise.
+CONFIG_ARGS=()
+load_test_config() {
+  CONFIG_ARGS=()
+  local cfg="$ROOT/house-cleaning-integration-tests/src/test/resources/configs"
+  local env_file="$cfg/environment.$HC_ENV.json" sec_file="$cfg/secured.$HC_ENV.json"
+  if [[ -f "$env_file" ]]; then
+    command -v jq >/dev/null || die "jq is required to read $env_file"
+    local vals; vals="$(mktemp "${TMPDIR:-/tmp}/hc-values.XXXXXX")"
+    jq '{report: {sendEmail: .sendEmail, baseUrl: .reportBaseUrl},
+         mail: (.mail // {} | {host, port, starttls, from, to})}
+        | del(..|select(. == null))' "$env_file" > "$vals"   # JSON is valid YAML
+    CONFIG_ARGS+=(-f "$vals")
+  fi
+  if [[ -f "$sec_file" ]]; then
+    command -v jq >/dev/null || die "jq is required to read $sec_file"
+    local user pass
+    user="$(jq -r '.mail.username // empty' "$sec_file")"; pass="$(jq -r '.mail.password // empty' "$sec_file")"
+    if [[ -n "$pass" ]]; then
+      kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+      kubectl -n "$NS" create secret generic smtp-creds --from-literal=username="$user" --from-literal=password="$pass" \
+        --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+      CONFIG_ARGS+=(--set-string mail.credentialsSecret=smtp-creds)
+    fi
+  fi
+}

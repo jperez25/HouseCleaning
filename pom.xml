@@ -29,6 +29,7 @@
         <rest-assured.version>5.5.0</rest-assured.version>
         <cucumber.version>8.0.4</cucumber.version>
         <karate.version>2.1.4</karate.version>
+        <allure.version>3.1.1</allure.version>
         <groovy.version>4.0.24</groovy.version>
         <maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
         <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
@@ -36,6 +37,14 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>io.qameta.allure</groupId>
+                <artifactId>allure-bom</artifactId>
+                <version>${allure.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <!-- Internal modules -->
             <dependency>
                 <groupId>com.occ</groupId>

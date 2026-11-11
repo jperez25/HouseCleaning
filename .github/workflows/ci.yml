@@ -1,0 +1,159 @@
+# Build, deploy to a throwaway Minikube cluster, run every suite, destroy the cluster,
+# then build an Allure report, publish it over HTTP (GitHub Pages) and email it via SMTP.
+#
+# Repository secrets (Settings > Secrets and variables > Actions):
+#   SMTP_HOST, SMTP_PORT (465 = implicit TLS, otherwise STARTTLS), SMTP_USERNAME, SMTP_PASSWORD, MAIL_TO
+#   MAIL_FROM (optional, defaults to SMTP_USERNAME)
+# Repository variable:
+#   PUBLISH_PAGES=true  publish the report to GitHub Pages (Settings > Pages > Source: GitHub Actions)
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Unit and Spring-context tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+      - run: ./mvnw -B verify -pl house-cleaning-common,house-cleaning-app -am
+
+  deploy-and-test:
+    name: Deploy to Minikube, test, destroy
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      MINIKUBE_CPUS: 3
+      MINIKUBE_MEMORY: 6144
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Install Minikube
+        run: |
+          curl -fsSLo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+          sudo install minikube /usr/local/bin/minikube
+          minikube version
+      - name: Deploy (db, app) and run the integration and BDD suites
+        run: scripts/deploy.sh all
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          kubectl -n house-cleaning get all || true
+          kubectl -n house-cleaning logs deployment/house-cleaning-app --tail=200 || true
+      - name: Collect Allure results
+        if: always()
+        run: scripts/collect-allure.sh allure-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-results
+          path: allure-results
+          if-no-files-found: warn
+      - name: Destroy the deployment
+        if: always()
+        run: |
+          scripts/teardown.sh tests || true
+          scripts/teardown.sh app || true
+          scripts/teardown.sh db --purge || true
+          minikube delete --all --purge || true
+
+  report:
+    name: Allure report
+    needs: deploy-and-test
+    if: always() && needs.deploy-and-test.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate the report
+        run: |
+          npm install -g allure@3
+          allure generate allure-results -o allure-report
+          (cd allure-report && zip -qr ../allure-report.zip .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: |
+            allure-report
+            allure-report.zip
+      - uses: actions/upload-pages-artifact@v3
+        if: vars.PUBLISH_PAGES == 'true' && github.event_name != 'pull_request'
+        with:
+          path: allure-report
+
+  publish:
+    name: Publish report over HTTP
+    needs: report
+    if: vars.PUBLISH_PAGES == 'true' && github.event_name != 'pull_request' && needs.report.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  email:
+    name: Email the report
+    needs: [deploy-and-test, report, publish]
+    if: always() && needs.report.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      MAIL_TO: ${{ secrets.MAIL_TO }}
+    steps:
+      - uses: actions/download-artifact@v4
+        if: env.SMTP_HOST != '' && env.MAIL_TO != ''
+        with:
+          name: allure-report
+          path: report
+      - name: Send the report
+        if: env.SMTP_HOST != '' && env.MAIL_TO != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          secure: ${{ secrets.SMTP_PORT == '465' }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          from: ${{ secrets.MAIL_FROM || secrets.SMTP_USERNAME }}
+          to: ${{ secrets.MAIL_TO }}
+          subject: "[${{ needs.deploy-and-test.result == 'success' && 'PASSED' || 'FAILED' }}] HouseCleaning tests - ${{ github.ref_name }} (${{ github.run_number }})"
+          html_body: |
+            <p>Tests <b>${{ needs.deploy-and-test.result }}</b> on <code>${{ github.ref_name }}</code>
+            (commit <code>${{ github.sha }}</code>).</p>
+            <ul>
+              <li>Workflow run: <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">${{ github.run_id }}</a></li>
+              ${{ needs.publish.outputs.page_url != '' && format('<li>Allure report (HTTP): <a href="{0}">{0}</a></li>', needs.publish.outputs.page_url) || '' }}
+              <li>The zipped report is attached. Unzip it and run <code>npx allure open .</code> to browse it over a local HTTP server.</li>
+            </ul>
+          attachments: report/allure-report.zip

@@ -1,3 +1,6 @@
 # Minikube: tests run in a pod and call the in-cluster app Service.
+# Allure results are written to the Minikube node so CI can copy them out (scripts/collect-allure.sh).
+results:
+  hostPath: /tmp/hc-allure/integration-tests
 target:
   baseUrl: http://house-cleaning-app:8080

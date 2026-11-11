@@ -4,3 +4,6 @@
 docs
 charts
 scripts
+
+# never bake real secrets into an image
+**/resources/configs/secured.*.json

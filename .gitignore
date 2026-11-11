@@ -31,3 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+allure-results/
+allure-report/
+
+# Secrets: only the *.example.json templates are tracked
+**/resources/configs/secured.*.json
+!**/resources/configs/secured.*.example.json

@@ -10,6 +10,7 @@
 #   deploy.sh tests                 iTest, then bTest (stops at the first failing suite)
 #
 # HC_ENV=minikube (default) | minikube-local | dev   picks charts/*/values-<env>.yaml (see charts/README.md)
+# Test charts also get report/mail settings from integration-tests/src/test/resources/configs (see its README.md)
 # Extra overrides: see lib.sh
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -47,7 +48,9 @@ run_suite() {
     echo "NOTE: no app deployment in the cluster (expected with HC_ENV=minikube-local: the app must be running on the host)."
   fi
   build_image "$chart" "$dockerfile"
-  helm_release "$chart"
+  CONFIG_ARGS=()
+  [[ "$chart" == house-cleaning-integration-tests ]] && load_test_config   # only that suite sends the report email
+  helm_release "$chart" "${CONFIG_ARGS[@]}"
   helm test "$chart" -n "$NS" --logs --timeout 15m
 }
 

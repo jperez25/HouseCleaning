@@ -12,6 +12,9 @@ test:
   activeDeadlineSeconds: 600
   extraArgs: []                  # extra Maven arguments, e.g. ["-Dcucumber.filter.tags=@smoke"]
 
+results:
+  hostPath: ""                   # node directory that receives the Allure results (empty = not collected)
+
 resources:
   requests:
     cpu: 200m

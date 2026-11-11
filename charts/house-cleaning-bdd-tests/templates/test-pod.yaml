@@ -21,5 +21,17 @@ spec:
       args:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.results.hostPath }}
+      volumeMounts:
+        - name: allure-results
+          mountPath: /allure-results
+      {{- end }}
       resources:
         {{- toYaml .Values.resources | nindent 8 }}
+  {{- if .Values.results.hostPath }}
+  volumes:
+    - name: allure-results
+      hostPath:
+        path: {{ .Values.results.hostPath | quote }}
+        type: DirectoryOrCreate
+  {{- end }}

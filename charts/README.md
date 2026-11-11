@@ -36,3 +36,6 @@ helm lint charts/house-cleaning-app -f charts/house-cleaning-app/values-dev.yaml
 - **Credentials**: local defaults are in `charts/house-cleaning-db/values.yaml`. Other environments set `auth.existingSecret` (db) and `database.credentialsSecret` (app) to an out-of-band Secret.
 - **Images**: on Minikube, `deploy.sh` builds with host Docker and `minikube image load`s them (no registry). For `dev` the pipeline is expected to push to the registry named in `values-dev.yaml`, so `deploy.sh` skips the local build.
 - **Test pods** download any Maven artifacts not cached in the image at build time, so they need access to Maven Central (or a mirror).
+
+## Report email and environment config
+The integration-tests pod can email a summary table (total, passed, failed, time) after the run (`report.sendEmail`, `mail.*` in the test charts' `values.yaml`). `scripts/deploy.sh` fills those values from `environment.<env>.json` and creates the `smtp-creds` Secret from the gitignored `secured.<env>.json`, both in `house-cleaning-integration-tests/src/test/resources/configs/` (needs `jq`). Only the integration-tests chart sends the email. See the README there.
